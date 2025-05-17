@@ -1,8 +1,7 @@
-package main
+package commands
 
 import (
 	"fmt"
-	"github.com/alecthomas/kong"
 	"image"
 	"image/color"
 	_ "image/jpeg"
@@ -11,73 +10,7 @@ import (
 	"os"
 )
 
-var CLI struct {
-	Info struct {
-		Path string `arg:"" name:"path" help:"Path to image."`
-	} `cmd:"" help:"Get info on file."`
-
-	Convert struct {
-		Width *int `optional:"" help:"Desired width of image."`
-
-		Path string `arg:"" name:"path" help:"Path to image."`
-	} `cmd:"" help:"Convert image to ascii."`
-}
-
-func w(t float32) float64 {
-	absT := math.Abs(float64(t))
-	a := -0.5
-
-	if absT <= 1 {
-		return (a+2)*math.Pow(absT, 3) - (a+3)*math.Pow(absT, 2) + 1
-	} else if absT < 2 {
-		return a*math.Pow(absT, 3) - 5*a*math.Pow(absT, 2) + 8*a*absT - 4*a
-	} else {
-		return 0
-	}
-}
-
-func handleInfo(path string) {
-	reader, err := os.Open(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer reader.Close()
-
-	m, _, err := image.Decode(reader)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	bounds := m.Bounds()
-
-	fmt.Printf("Image Size: (%d x %d)\n", bounds.Max.X, bounds.Max.Y)
-}
-
-func printAsciiImage(image image.Image) {
-	bounds := image.Bounds()
-
-	brightness_symbols := "`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r16, g16, b16, _ := image.At(x, y).RGBA()
-
-			r8, g8, b8 := uint(r16>>8), uint(g16>>8), uint(b16>>8)
-
-			luminosity := uint8(0.21*float32(r8) + 0.72*float32(g8) + 0.07*float32(b8))
-
-			symbol_index := int8(math.Round(float64(luminosity) * float64(len(brightness_symbols)-1) / 255))
-
-			symbol := brightness_symbols[symbol_index]
-			fmt.Printf("%c%c%c", symbol, symbol, symbol)
-		}
-		fmt.Println()
-	}
-}
-
-func handleConvert(path string, width *int) {
+func HandleConvert(path string, width *int) {
 	reader, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
@@ -176,18 +109,37 @@ func handleConvert(path string, width *int) {
 	}
 }
 
-func main() {
-	ctx := kong.Parse(&CLI)
+func w(t float32) float64 {
+	absT := math.Abs(float64(t))
+	a := -0.5
 
-	fmt.Printf("%v", CLI.Info)
-	fmt.Printf("%v", CLI.Convert)
+	if absT <= 1 {
+		return (a+2)*math.Pow(absT, 3) - (a+3)*math.Pow(absT, 2) + 1
+	} else if absT < 2 {
+		return a*math.Pow(absT, 3) - 5*a*math.Pow(absT, 2) + 8*a*absT - 4*a
+	} else {
+		return 0
+	}
+}
 
-	switch ctx.Command() {
-	case "info <path>":
-		handleInfo(CLI.Info.Path)
-	case "convert <path>":
-		handleConvert(CLI.Convert.Path, CLI.Convert.Width)
-	default:
-		log.Fatal("command not found.")
+func printAsciiImage(image image.Image) {
+	bounds := image.Bounds()
+
+	brightness_symbols := "`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r16, g16, b16, _ := image.At(x, y).RGBA()
+
+			r8, g8, b8 := uint(r16>>8), uint(g16>>8), uint(b16>>8)
+
+			luminosity := uint8(0.21*float32(r8) + 0.72*float32(g8) + 0.07*float32(b8))
+
+			symbol_index := int8(math.Round(float64(luminosity) * float64(len(brightness_symbols)-1) / 255))
+
+			symbol := brightness_symbols[symbol_index]
+			fmt.Printf("%c%c%c", symbol, symbol, symbol)
+		}
+		fmt.Println()
 	}
 }

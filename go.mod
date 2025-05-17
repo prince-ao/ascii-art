@@ -1,4 +1,4 @@
-module ascii-art
+module asciify
 
 go 1.22.5
 
