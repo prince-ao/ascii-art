@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"github.com/alecthomas/kong"
 	"image"
-	// "image/color"
+	"image/color"
 	_ "image/jpeg"
 	"log"
 	"math"
 	"os"
-	// "strconv"
-	// "time"
 )
 
 var CLI struct {
@@ -19,7 +17,7 @@ var CLI struct {
 	} `cmd:"" help:"Get info on file."`
 
 	Convert struct {
-		Width int `optional:"" help:"Desired width of image."`
+		Width *int `optional:"" help:"Desired width of image."`
 
 		Path string `arg:"" name:"path" help:"Path to image."`
 	} `cmd:"" help:"Convert image to ascii."`
@@ -47,6 +45,7 @@ func handleInfo(path string) {
 	defer reader.Close()
 
 	m, _, err := image.Decode(reader)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,36 +55,30 @@ func handleInfo(path string) {
 	fmt.Printf("Image Size: (%d x %d)\n", bounds.Max.X, bounds.Max.Y)
 }
 
-func handleConvert(path string, width int) {
+func printAsciiImage(image image.Image) {
+	bounds := image.Bounds()
 
+	brightness_symbols := "`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r16, g16, b16, _ := image.At(x, y).RGBA()
+
+			r8, g8, b8 := uint(r16>>8), uint(g16>>8), uint(b16>>8)
+
+			luminosity := uint8(0.21*float32(r8) + 0.72*float32(g8) + 0.07*float32(b8))
+
+			symbol_index := int8(math.Round(float64(luminosity) * float64(len(brightness_symbols)-1) / 255))
+
+			symbol := brightness_symbols[symbol_index]
+			fmt.Printf("%c%c%c", symbol, symbol, symbol)
+		}
+		fmt.Println()
+	}
 }
 
-func main() {
-	ctx := kong.Parse(&CLI)
-
-	switch ctx.Command() {
-	case "info <path>":
-		handleInfo(CLI.Info.Path)
-	case "convert":
-		// handleConvert(CLI.Convert.Path, CLI.Convert.Width)
-	default:
-		fmt.Printf("%v", ctx.Command())
-	}
-	/* args := os.Args
-
-	if len(args[1:]) < 1 {
-		log.Fatal("expected 2 command line arguments.")
-	}
-
-	file := args[1]
-
-	W, err := strconv.Atoi(args[2])
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	reader, err := os.Open(file)
+func handleConvert(path string, width *int) {
+	reader, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -98,105 +91,103 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Successfully loaded image!")
+	if width != nil {
 
-	bounds := m.Bounds()
+		bounds := m.Bounds()
 
-	fmt.Printf("Image size: %d x %d\n", bounds.Max.X, bounds.Max.Y)
+		scale := float64(*width) / float64(bounds.Max.X)
 
-	scale := float64(W) / float64(bounds.Max.X)
+		if scale > 1 {
+			log.Fatal("only down-sampling allowed")
+		}
 
-	if scale > 1 {
-		log.Fatal("only down-sampling allowed")
-	}
+		H := float64(bounds.Max.Y) * scale
 
-	H := float64(bounds.Max.Y) * scale
+		newImage := image.NewRGBA(image.Rect(0, 0, *width, int(H)))
 
-	newImage := image.NewRGBA(image.Rect(0, 0, W, int(H)))
+		newBounds := newImage.Bounds()
 
-	newBounds := newImage.Bounds()
+		for y1 := newBounds.Min.Y; y1 < newBounds.Max.Y; y1++ {
+			for x1 := newBounds.Min.X; x1 < newBounds.Max.X; x1++ {
+				x0, y0 := (float32(x1)+0.5)/float32(scale)-0.5, (float32(y1)+0.5)/float32(scale)-0.5
 
-	for y1 := newBounds.Min.Y; y1 < newBounds.Max.Y; y1++ {
-		for x1 := newBounds.Min.X; x1 < newBounds.Max.X; x1++ {
-			x0, y0 := (float32(x1)+0.5)/float32(scale)-0.5, (float32(y1)+0.5)/float32(scale)-0.5
+				i, j := int(x0), int(y0)
 
-			i, j := int(x0), int(y0)
+				sigmaX := x0 - float32(i)
+				sigmaY := y0 - float32(j)
 
-			sigmaX := x0 - float32(i)
-			sigmaY := y0 - float32(j)
+				window := [4]int{-1, 0, 1, 2}
 
-			window := [4]int{-1, 0, 1, 2}
+				Wx := [4]float64{w(-1 - sigmaX), w(0 - sigmaX), w(1 - sigmaX), w(2 - sigmaX)}
+				Wy := [4]float64{w(-1 - sigmaY), w(0 - sigmaY), w(1 - sigmaY), w(2 - sigmaY)}
 
-			Wx := [4]float64{w(-1 - sigmaX), w(0 - sigmaX), w(1 - sigmaX), w(2 - sigmaX)}
-			Wy := [4]float64{w(-1 - sigmaY), w(0 - sigmaY), w(1 - sigmaY), w(2 - sigmaY)}
+				W := make([][]float64, 4)
 
-			W := make([][]float64, 4)
-
-			for i := 0; i < 4; i++ {
-				W[i] = make([]float64, 4)
-			}
-
-			for _, v1 := range window {
-				for _, v2 := range window {
-					W[v1+1][v2+1] = Wx[v1+1] * Wy[v2+1]
+				for i := 0; i < 4; i++ {
+					W[i] = make([]float64, 4)
 				}
-			}
 
-			var accR float64 = 0
-			var accG float64 = 0
-			var accB float64 = 0
-
-			for _, v1 := range window {
-				for _, v2 := range window {
-					real_i := i + v1
-					real_j := j + v2
-					P := [3]uint32{}
-					if real_i < bounds.Min.X || real_i >= bounds.Max.X || real_j < bounds.Min.Y || real_j >= bounds.Max.Y {
-						P[0] = 0
-						P[1] = 0
-						P[2] = 0
-					} else {
-						r, g, b, _ := m.At(real_i, real_j).RGBA()
-
-						P[0] = r >> 8
-						P[1] = g >> 8
-						P[2] = b >> 8
+				for _, v1 := range window {
+					for _, v2 := range window {
+						W[v1+1][v2+1] = Wx[v1+1] * Wy[v2+1]
 					}
-
-					w := W[v1+1][v2+1]
-
-					accR += float64(P[0]) * w
-					accG += float64(P[1]) * w
-					accB += float64(P[2]) * w
 				}
+
+				var accR float64 = 0
+				var accG float64 = 0
+				var accB float64 = 0
+
+				for _, v1 := range window {
+					for _, v2 := range window {
+						real_i := i + v1
+						real_j := j + v2
+						P := [3]uint32{}
+						if real_i < bounds.Min.X || real_i >= bounds.Max.X || real_j < bounds.Min.Y || real_j >= bounds.Max.Y {
+							P[0] = 0
+							P[1] = 0
+							P[2] = 0
+						} else {
+							r, g, b, _ := m.At(real_i, real_j).RGBA()
+
+							P[0] = r >> 8
+							P[1] = g >> 8
+							P[2] = b >> 8
+						}
+
+						w := W[v1+1][v2+1]
+
+						accR += float64(P[0]) * w
+						accG += float64(P[1]) * w
+						accB += float64(P[2]) * w
+					}
+				}
+
+				outR := uint8(math.Min(math.Max(accR, 0), 255))
+				outG := uint8(math.Min(math.Max(accG, 0), 255))
+				outB := uint8(math.Min(math.Max(accB, 0), 255))
+
+				newImage.Set(x1, y1, color.RGBA{outR, outG, outB, 255})
 			}
-
-			outR := uint8(math.Min(math.Max(accR, 0), 255))
-			outG := uint8(math.Min(math.Max(accG, 0), 255))
-			outB := uint8(math.Min(math.Max(accB, 0), 255))
-
-			newImage.Set(x1, y1, color.RGBA{outR, outG, outB, 255})
 		}
+
+		printAsciiImage(newImage)
+	} else {
+		printAsciiImage(m)
 	}
+}
 
-	time.Sleep(5 * 1e9)
+func main() {
+	ctx := kong.Parse(&CLI)
 
-	brightness_symbols := "`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
+	fmt.Printf("%v", CLI.Info)
+	fmt.Printf("%v", CLI.Convert)
 
-	for y := newBounds.Min.Y; y < newBounds.Max.Y; y++ {
-		for x := newBounds.Min.X; x < newBounds.Max.X; x++ {
-			r16, g16, b16, _ := newImage.At(x, y).RGBA()
-
-			r8, g8, b8 := uint(r16>>8), uint(g16>>8), uint(b16>>8)
-
-			luminosity := uint8(0.21*float32(r8) + 0.72*float32(g8) + 0.07*float32(b8))
-
-			symbol_index := int8(math.Round(float64(luminosity) * float64(len(brightness_symbols)-1) / 255))
-
-			symbol := brightness_symbols[symbol_index]
-			fmt.Printf("%c%c%c", symbol, symbol, symbol)
-		}
-		fmt.Println()
-	} */
-
+	switch ctx.Command() {
+	case "info <path>":
+		handleInfo(CLI.Info.Path)
+	case "convert <path>":
+		handleConvert(CLI.Convert.Path, CLI.Convert.Width)
+	default:
+		log.Fatal("command not found.")
+	}
 }
