@@ -2,15 +2,28 @@ package main
 
 import (
 	"fmt"
+	"github.com/alecthomas/kong"
 	"image"
-	"image/color"
+	// "image/color"
 	_ "image/jpeg"
 	"log"
 	"math"
 	"os"
-	"strconv"
-	"time"
+	// "strconv"
+	// "time"
 )
+
+var CLI struct {
+	Info struct {
+		Path string `arg:"" name:"path" help:"Path to image."`
+	} `cmd:"" help:"Get info on file."`
+
+	Convert struct {
+		Width int `optional:"" help:"Desired width of image."`
+
+		Path string `arg:"" name:"path" help:"Path to image."`
+	} `cmd:"" help:"Convert image to ascii."`
+}
 
 func w(t float32) float64 {
 	absT := math.Abs(float64(t))
@@ -25,8 +38,40 @@ func w(t float32) float64 {
 	}
 }
 
+func handleInfo(path string) {
+	reader, err := os.Open(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer reader.Close()
+
+	m, _, err := image.Decode(reader)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bounds := m.Bounds()
+
+	fmt.Printf("Image Size: (%d x %d)\n", bounds.Max.X, bounds.Max.Y)
+}
+
+func handleConvert(path string, width int) {
+
+}
+
 func main() {
-	args := os.Args
+	ctx := kong.Parse(&CLI)
+
+	switch ctx.Command() {
+	case "info <path>":
+		handleInfo(CLI.Info.Path)
+	case "convert":
+		// handleConvert(CLI.Convert.Path, CLI.Convert.Width)
+	default:
+		fmt.Printf("%v", ctx.Command())
+	}
+	/* args := os.Args
 
 	if len(args[1:]) < 1 {
 		log.Fatal("expected 2 command line arguments.")
@@ -152,6 +197,6 @@ func main() {
 			fmt.Printf("%c%c%c", symbol, symbol, symbol)
 		}
 		fmt.Println()
-	}
+	} */
 
 }
